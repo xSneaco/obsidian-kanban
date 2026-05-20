@@ -1786,3 +1786,32 @@ body:not(.native-scrollbars) .kanban-plugin__scroll-container::-webkit-scrollbar
     background-color: var(--date-background-color, rgba(var(--mono-rgb-100), 0.05));
   }
 }
+
+/* Trello Badges */
+.trello-card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.trello-label { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+.trello-due-badge { font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--background-modifier-hover); }
+.trello-due-overdue { background: #eb5a46 !important; color: white; }
+.trello-member-avatar { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--interactive-accent); color: white; font-size: 10px; }
+.trello-comment-badge { font-size: 11px; display: inline-flex; align-items: center; gap: 2px; }
+.trello-attachment-badge { font-size: 11px; }
+
+/* Trello Comments View */
+.trello-comments-view { display: flex; flex-direction: column; height: 100%; padding: 8px; }
+.trello-comments-panel { display: flex; flex-direction: column; height: 100%; }
+.trello-comments-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.trello-comments-title { font-weight: 600; }
+.trello-comments-actions { display: flex; gap: 4px; }
+.trello-comments-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.trello-comments-empty, .trello-comments-loading, .trello-comments-empty-state { color: var(--text-muted); font-style: italic; padding: 8px; }
+.trello-comment-item { display: flex; gap: 8px; }
+.trello-comment-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--interactive-accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+.trello-comment-body { flex: 1; }
+.trello-comment-header { display: flex; gap: 6px; align-items: center; margin-bottom: 2px; }
+.trello-comment-author { font-weight: 600; font-size: 12px; }
+.trello-comment-time { font-size: 11px; color: var(--text-muted); }
+.trello-comment-unsynced { font-size: 11px; color: var(--text-warning); }
+.trello-comment-text { font-size: 13px; white-space: pre-wrap; }
+.trello-comment-input { display: flex; flex-direction: column; gap: 4px; }
+.trello-comment-textarea { width: 100%; resize: vertical; min-height: 60px; }
+.trello-comment-submit { align-self: flex-end; }

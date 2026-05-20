@@ -17,6 +17,13 @@ import {
 import { generateInstanceId } from '../components/helpers';
 import { Board, DataTypes, Item, Lane } from '../components/types';
 
+function fireTrelloHook(view: KanbanView, fn: (hooks: import('src/trello/TrelloHooks').TrelloHooks) => Promise<void>) {
+  const plugin = view.plugin as any;
+  if (plugin?.trelloHooks) {
+    fn(plugin.trelloHooks).catch(() => {});
+  }
+}
+
 export interface BoardModifiers {
   appendItems: (path: Path, items: Item[]) => void;
   prependItems: (path: Path, items: Item[]) => void;
@@ -56,15 +63,33 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
 
   return {
     appendItems: (path: Path, items: Item[]) => {
-      stateManager.setState((boardData) => appendEntities(boardData, path, items));
+      stateManager.setState((boardData) => {
+        const laneId = boardData.children[path[0]]?.id;
+        items.forEach((item) => {
+          fireTrelloHook(view, (h) => h.onItemCreated(stateManager, laneId, item));
+        });
+        return appendEntities(boardData, path, items);
+      });
     },
 
     prependItems: (path: Path, items: Item[]) => {
-      stateManager.setState((boardData) => prependEntities(boardData, path, items));
+      stateManager.setState((boardData) => {
+        const laneId = boardData.children[path[0]]?.id;
+        items.forEach((item) => {
+          fireTrelloHook(view, (h) => h.onItemCreated(stateManager, laneId, item));
+        });
+        return prependEntities(boardData, path, items);
+      });
     },
 
     insertItems: (path: Path, items: Item[]) => {
-      stateManager.setState((boardData) => insertEntity(boardData, path, items));
+      stateManager.setState((boardData) => {
+        const laneId = boardData.children[path[0]]?.id;
+        items.forEach((item) => {
+          fireTrelloHook(view, (h) => h.onItemCreated(stateManager, laneId, item));
+        });
+        return insertEntity(boardData, path, items);
+      });
     },
 
     replaceItem: (path: Path, items: Item[]) => {
@@ -101,6 +126,7 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
         };
 
         view.setViewState('list-collapse', undefined, op);
+        fireTrelloHook(view, (h) => h.onLaneCreated(stateManager, lane));
         return update<Board>(appendEntities(boardData, [], [lane]), {
           data: { settings: { 'list-collapse': { $set: op(collapseState) } } },
         });
@@ -117,6 +143,7 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
         };
 
         view.setViewState('list-collapse', undefined, op);
+        fireTrelloHook(view, (h) => h.onLaneCreated(stateManager, lane));
 
         return update<Board>(insertEntity(boardData, path, [lane]), {
           data: { settings: { 'list-collapse': { $set: op(collapseState) } } },
@@ -125,20 +152,25 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
     },
 
     updateLane: (path: Path, lane: Lane) => {
-      stateManager.setState((boardData) =>
-        updateParentEntity(boardData, path, {
+      stateManager.setState((boardData) => {
+        const oldLane = getEntityFromPath(boardData, path) as Lane;
+        if (oldLane && oldLane.data.title !== lane.data.title) {
+          fireTrelloHook(view, (h) => h.onLaneRenamed(stateManager, lane.id, lane.data.title));
+        }
+        return updateParentEntity(boardData, path, {
           children: {
             [path[path.length - 1]]: {
               $set: lane,
             },
           },
-        })
-      );
+        });
+      });
     },
 
     archiveLane: (path: Path) => {
       stateManager.setState((boardData) => {
-        const lane = getEntityFromPath(boardData, path);
+        const lane = getEntityFromPath(boardData, path) as Lane;
+        fireTrelloHook(view, (h) => h.onLaneArchived(stateManager, lane.id));
         const items = lane.children;
 
         try {
@@ -201,6 +233,7 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
         const entity = getEntityFromPath(boardData, path);
 
         if (entity.type === DataTypes.Lane) {
+          fireTrelloHook(view, (h) => h.onLaneArchived(stateManager, entity.id));
           const collapseState = view.getViewState('list-collapse');
           const op = (collapseState: boolean[]) => {
             const newState = [...collapseState];
@@ -214,12 +247,17 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
           });
         }
 
+        fireTrelloHook(view, (h) => h.onItemDeleted(stateManager, entity.id));
         return removeEntity(boardData, path);
       });
     },
 
     updateItem: (path: Path, item: Item) => {
       stateManager.setState((boardData) => {
+        const oldItem = getEntityFromPath(boardData, path) as Item;
+        if (oldItem) {
+          fireTrelloHook(view, (h) => h.onItemUpdated(stateManager, item, oldItem.data.titleRaw));
+        }
         return updateParentEntity(boardData, path, {
           children: {
             [path[path.length - 1]]: {
@@ -232,7 +270,8 @@ export function getBoardModifiers(view: KanbanView, stateManager: StateManager):
 
     archiveItem: (path: Path) => {
       stateManager.setState((boardData) => {
-        const item = getEntityFromPath(boardData, path);
+        const item = getEntityFromPath(boardData, path) as Item;
+        fireTrelloHook(view, (h) => h.onItemDeleted(stateManager, item.id));
         try {
           return update(removeEntity(boardData, path), {
             data: {

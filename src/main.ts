@@ -1,6 +1,7 @@
 import { around } from 'monkey-around';
 import {
   MarkdownView,
+  Notice,
   Platform,
   Plugin,
   TFile,
@@ -20,6 +21,13 @@ import { getParentWindow } from './dnd/util/getWindow';
 import { hasFrontmatterKey } from './helpers';
 import { t } from './lang/helpers';
 import { basicFrontmatter, frontmatterKey } from './parsers/common';
+import { CommentsView, VIEW_TYPE_TRELLO_COMMENTS } from './trello/CommentsView';
+import { TrelloClient } from './trello/TrelloClient';
+import { TrelloCommentStore } from './trello/TrelloCommentStore';
+import { createTrelloHooks, TrelloHooks } from './trello/TrelloHooks';
+import { TrelloMetadataManager } from './trello/TrelloMetadata';
+import { TrelloNoteManager } from './trello/TrelloNoteManager';
+import { TrelloSync } from './trello/TrelloSync';
 
 interface WindowRegistry {
   viewMap: Map<string, KanbanView>;
@@ -58,6 +66,64 @@ export default class KanbanPlugin extends Plugin {
   _loaded: boolean = false;
 
   isShiftPressed: boolean = false;
+
+  trelloClient: TrelloClient | null = null;
+  trelloSync: TrelloSync | null = null;
+  trelloHooks: TrelloHooks | null = null;
+  trelloNoteManager: TrelloNoteManager | null = null;
+  trelloCommentStore: TrelloCommentStore | null = null;
+  trelloMetadataManager: TrelloMetadataManager | null = null;
+
+  initTrello() {
+    const s = this.settings as any;
+    if (s.trelloApiKey && s.trelloToken) {
+      this.trelloClient = new TrelloClient(s.trelloApiKey, s.trelloToken);
+      this.trelloMetadataManager = new TrelloMetadataManager(this.app);
+      this.trelloNoteManager = new TrelloNoteManager(this.app);
+      this.trelloCommentStore = new TrelloCommentStore(this.app.vault);
+      this.trelloSync = new TrelloSync(
+        this.app,
+        this.trelloClient,
+        this.trelloMetadataManager,
+        this.trelloNoteManager,
+        this.trelloCommentStore
+      );
+      this.trelloHooks = createTrelloHooks(this);
+    } else {
+      this.trelloClient = null;
+      this.trelloSync = null;
+      this.trelloHooks = null;
+    }
+  }
+
+  async pushActiveNoteToTrello() {
+    const file = this.app.workspace.getActiveFile();
+    if (!file || !this.trelloSync) {
+      new Notice('No active note or Trello not configured');
+      return;
+    }
+    await this.trelloSync.pushNoteToTrello(file.path).catch((e: Error) => new Notice(`Trello push failed: ${e.message}`));
+  }
+
+  async pushActiveNoteComments() {
+    const file = this.app.workspace.getActiveFile();
+    if (!file || !this.trelloSync) {
+      new Notice('No active note or Trello not configured');
+      return;
+    }
+    await this.trelloSync.pushNoteComments(file.path).catch((e: Error) => new Notice(`Trello push failed: ${e.message}`));
+  }
+
+  async toggleCommentsPanel() {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_TRELLO_COMMENTS);
+    if (existing.length) {
+      existing[0].detach();
+    } else {
+      const leaf = this.app.workspace.getRightLeaf(false);
+      await leaf.setViewState({ type: VIEW_TYPE_TRELLO_COMMENTS });
+      this.app.workspace.revealLeaf(leaf);
+    }
+  }
 
   async loadSettings() {
     this.settings = Object.assign({}, await this.loadData());
@@ -130,9 +196,12 @@ export default class KanbanPlugin extends Plugin {
     this.addSettingTab(this.settingsTab);
 
     this.registerView(kanbanViewType, (leaf) => new KanbanView(leaf, this));
+    this.registerView(VIEW_TYPE_TRELLO_COMMENTS, (leaf) => new CommentsView(leaf, this));
     this.registerMonkeyPatches();
     this.registerCommands();
+    this.registerTrelloCommands();
     this.registerEvents();
+    this.initTrello();
 
     // Mount an empty component to start; views will be added as we go
     this.mount(window);
@@ -720,6 +789,40 @@ export default class KanbanPlugin extends Plugin {
 
         view.getBoardSettings();
       },
+    });
+  }
+
+  registerTrelloCommands() {
+    this.addCommand({
+      id: 'trello-pull',
+      name: 'Pull from Trello',
+      checkCallback: (checking) => {
+        const activeView = this.app.workspace.getActiveViewOfType(KanbanView);
+        if (!activeView || !this.trelloSync) return false;
+        const stateManager = this.stateManagers.get(activeView.file);
+        if (!stateManager) return false;
+        if (checking) return this.trelloHooks?.isTrelloBoard(stateManager) ?? false;
+        this.trelloSync.pull(stateManager);
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: 'trello-push-note',
+      name: 'Push Note to Trello',
+      callback: () => this.pushActiveNoteToTrello(),
+    });
+
+    this.addCommand({
+      id: 'trello-push-comments',
+      name: 'Push Comments to Trello',
+      callback: () => this.pushActiveNoteComments(),
+    });
+
+    this.addCommand({
+      id: 'trello-toggle-comments',
+      name: 'Toggle Trello Comments Panel',
+      callback: () => this.toggleCommentsPanel(),
     });
   }
 

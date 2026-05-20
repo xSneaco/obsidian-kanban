@@ -33,6 +33,7 @@ import { getParentWindow } from './dnd/util/getWindow';
 import { t } from './lang/helpers';
 import KanbanPlugin from './main';
 import { frontmatterKey } from './parsers/common';
+import { renderTrelloBoardSettings, renderTrelloGlobalSettings } from './trello/TrelloSettings';
 import {
   createSearchSelect,
   defaultDateTrigger,
@@ -90,6 +91,11 @@ export interface KanbanSettings {
   'tag-sort'?: TagSort[];
   'time-format'?: string;
   'time-trigger'?: string;
+  trelloApiKey?: string;
+  trelloToken?: string;
+  trelloArchiveBehavior?: 'archive' | 'delete';
+  trelloAutoOpenComments?: boolean;
+  trelloSyncOnOpen?: boolean;
 }
 
 export interface KanbanViewSettings {
@@ -1556,6 +1562,7 @@ export class SettingsModal extends Modal {
     modalEl.addClass(c('board-settings-modal'));
 
     this.settingsManager.constructUI(contentEl, this.view.file.basename, true);
+    renderTrelloBoardSettings(contentEl, this.view.plugin, this.view.file.path);
   }
 
   onClose() {
@@ -1583,5 +1590,10 @@ export class KanbanSettingsTab extends PluginSettingTab {
     containerEl.addClass(c('board-settings-modal'));
 
     this.settingsManager.constructUI(containerEl, t('Kanban Plugin'), false);
+
+    renderTrelloGlobalSettings(containerEl, this.plugin, async (newSettings) => {
+      this.plugin.settings = newSettings;
+      await this.plugin.saveSettings();
+    });
   }
 }

@@ -111,6 +111,24 @@ export function DragDropApp({ win, plugin }: { win: Window; plugin: KanbanPlugin
 
         return stateManager.setState((board) => {
           const entity = getEntityFromPath(board, dragPath);
+
+          // Fire Trello hook for item moves
+          if (entity.type === DataTypes.Item) {
+            const isTrello = plugin.trelloHooks?.isTrelloBoard(stateManager);
+            console.log('[Trello] drag drop: entity type=Item, isTrelloBoard=', isTrello, 'trelloHooks=', !!plugin.trelloHooks, 'trelloSync=', !!plugin.trelloSync);
+            if (isTrello) {
+              const newLaneId = board.children[dropPath[0]]?.id;
+              const newIndex = dropPath[1] ?? 0;
+              console.log('[Trello] onItemMoved -> itemId=', entity.id, 'newLaneId=', newLaneId, 'newIndex=', newIndex, 'dropPath=', dropPath);
+              if (newLaneId) {
+                plugin.trelloHooks.onItemMoved(stateManager, entity.id, newLaneId, newIndex)
+                  .catch((e) => console.error('[Trello] onItemMoved error:', e));
+              } else {
+                console.warn('[Trello] onItemMoved skipped: newLaneId is undefined (dropPath[0]=', dropPath[0], ')');
+              }
+            }
+          }
+
           const newBoard: Board = moveEntity(
             board,
             dragPath,

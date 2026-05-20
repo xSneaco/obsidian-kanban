@@ -237,6 +237,15 @@ export class KanbanView extends TextFileView implements HoverParent {
     }
 
     this.plugin.addView(this, data, !clear && this.isPrimary);
+
+    if (clear && (this.plugin.settings as any).trelloSyncOnOpen) {
+      activeWindow.setTimeout(() => {
+        const sm = this.plugin.getStateManager(this.file);
+        if (sm && this.plugin.trelloHooks?.isTrelloBoard(sm)) {
+          this.plugin.trelloSync?.pull(sm).catch(() => {});
+        }
+      }, 500);
+    }
   }
 
   async setState(state: any, result: ViewStateResult): Promise<void> {
@@ -475,6 +484,17 @@ export class KanbanView extends TextFileView implements HoverParent {
     } else if (!stateManager.getSetting('show-add-list') && this.actionButtons['show-add-list']) {
       this.actionButtons['show-add-list'].remove();
       delete this.actionButtons['show-add-list'];
+    }
+
+    const isTrello = this.plugin.trelloHooks?.isTrelloBoard(stateManager);
+
+    if (isTrello && !this.actionButtons['trello-pull']) {
+      this.actionButtons['trello-pull'] = this.addAction('download', 'Pull from Trello', () => {
+        this.plugin.trelloSync?.pull(stateManager);
+      });
+    } else if (!isTrello && this.actionButtons['trello-pull']) {
+      this.actionButtons['trello-pull'].remove();
+      delete this.actionButtons['trello-pull'];
     }
   };
 
